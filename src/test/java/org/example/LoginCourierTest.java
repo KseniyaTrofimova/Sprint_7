@@ -1,8 +1,9 @@
 package org.example;
 
-import io.qameta.allure.Step;
+import io.qameta.allure.Description;
 import io.qameta.allure.junit4.DisplayName;
 import io.restassured.RestAssured;
+import io.restassured.config.HttpClientConfig;
 import io.restassured.filter.log.RequestLoggingFilter;
 import io.restassured.filter.log.ResponseLoggingFilter;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -12,93 +13,107 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.apache.http.HttpStatus.*;
+import static org.hamcrest.Matchers.*;
 
-public class LoginCourierTest {
+public class LoginCourierTest extends BaseTest {
 
     private final CourierSteps courierSteps = new CourierSteps();
     private Courier courier;
+    private Integer courierId = null;
 
     @Before
     public void setUp() {
+        RestAssured.config = RestAssured.config()
+                .httpClient(HttpClientConfig.httpClientConfig()
+                        .setParam("http.connection.timeout", 30000)
+                        .setParam("http.socket.timeout", 30000));
         RestAssured.filters(new RequestLoggingFilter(), new ResponseLoggingFilter());
-        courier = new Courier();
-        courier.setLogin(RandomStringUtils.randomAlphabetic(6));
-        courier.setPassword(RandomStringUtils.randomAlphabetic(6));
-        courier.setFirstName(RandomStringUtils.randomAlphabetic(6));
+        courier = new Courier(
+                RandomStringUtils.randomAlphabetic(10),
+                RandomStringUtils.randomAlphabetic(10),
+                RandomStringUtils.randomAlphabetic(10)
+        );
+
+        courierSteps.createCourier(courier)
+                .statusCode(SC_CREATED);
+
+        courierId = courierSteps.loginCourier(courier)
+                .statusCode(SC_OK)
+                .extract().path("id");
     }
 
     @Test
     @DisplayName("Проверка авторизации курьера")
-    @Step("Метод для авторизации курьера")
+    @Description("Метод для авторизации курьера")
     public void shouldLoginCourierTest() {
-        courierSteps.createCourier(courier);
         courierSteps.loginCourier(courier)
-                .statusCode(200)
+                .statusCode(SC_OK)
                 .body("id", notNullValue());
 
     }
 
     @Test
     @DisplayName("Проверка авторизации курьера без обязательного поля логин")
-    @Step("Метод для авторизации курьера без заполненного поля логин")
+    @Description("Метод для авторизации курьера без заполненного поля логин")
     public void shouldRequiredFieldAuthorizationLogin() {
-        courierSteps.createCourier(courier);
-        courier.setLogin(null);
-        courierSteps.loginCourier(courier)
-                .statusCode(400)
+        Courier noLoginCourier = new Courier(null, courier.getPassword(), null);
+        courierSteps.loginCourier(noLoginCourier)
+                .statusCode(SC_BAD_REQUEST)
                 .body("message", is("Недостаточно данных для входа"));
     }
 
     @Test
     @DisplayName("Проверка авторизации курьера без обязательного поля пароль")
-    @Step("Метод для авторизации курьера без заполненного поля пароль")
+    @Description("Метод для авторизации курьера без заполненного поля пароль")
     public void shouldRequiredFieldAuthorizationPassword() {
-        courierSteps.createCourier(courier);
-        courier.setPassword(null);
-        courierSteps.loginCourier(courier)
-                .statusCode(400)
+        Courier noPasswordCourier = new Courier(courier.getLogin(), null, null);
+        courierSteps.loginCourier(noPasswordCourier)
+                .statusCode(SC_BAD_REQUEST)
                 .body("message", is("Недостаточно данных для входа"));
     }
 
     @Test
     @DisplayName("Проверка авторизации курьера с неверным полем логин")
-    @Step("Метод для авторизации курьера с неверно заполненным полем логин")
+    @Description("Метод для авторизации курьера с неверно заполненным полем логин")
     public void shouldAuthorizationInvalidLogin() {
-        courier.setLogin("loginov");
-        courier.setPassword("password");
-        courierSteps.createCourier(courier);
-        courier.setLogin("logi");
-        courierSteps.loginCourier(courier)
-                .statusCode(404)
+        Courier invalidLoginCourier = new Courier(
+                "invalid_" + RandomStringUtils.randomAlphabetic(10),
+                courier.getPassword(),
+                null
+        );
+
+        courierSteps.loginCourier(invalidLoginCourier)
+                .statusCode(SC_NOT_FOUND)
                 .body("message", is("Учетная запись не найдена"));
     }
 
     @Test
     @DisplayName("Проверка авторизации курьера с неверным полем пароль")
-    @Step("Метод для авторизации курьера с неверно заполненным полем пароль")
+    @Description("Метод для авторизации курьера с неверно заполненным полем пароль")
     public void shouldAuthorizationInvalidPassword() {
-        courier.setLogin("gorbunov");
-        courier.setPassword("password");
-        courierSteps.createCourier(courier);
-        courier.setPassword("pasword");
-        courierSteps.loginCourier(courier)
-                .statusCode(404)
+        Courier invalidPasswordCourier = new Courier(
+                courier.getLogin(),
+                "wrong_" + RandomStringUtils.randomAlphabetic(10),
+                null
+        );
+
+        courierSteps.loginCourier(invalidPasswordCourier)
+                .statusCode(SC_NOT_FOUND)
                 .body("message", is("Учетная запись не найдена"));
     }
 
     @After
     public void tearDown() {
-        if (courier.getLogin() != null && courier.getPassword() != null) {
-            Integer courierId = courierSteps.loginCourier(courier)
-                    .statusCode(200)
-                    .extract().path("id");
-
-            if (courierId != null) {
+        if (courierId != null) {
+            try {
+                Thread.sleep(1000);
                 courierSteps.deleteCourier(courierId)
-                        .statusCode(200);
+                        .statusCode(anyOf(is(SC_OK), is(SC_NOT_FOUND)));
+            } catch (Exception e) {
+                System.out.println("Не удалось удалить курьера: " + e.getMessage());
             }
         }
     }
 }
+

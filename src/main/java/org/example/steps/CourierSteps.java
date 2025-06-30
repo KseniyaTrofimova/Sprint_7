@@ -1,16 +1,17 @@
 package org.example.steps;
 
+import io.qameta.allure.Step;
 import io.restassured.response.ValidatableResponse;
 import org.example.model.Courier;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.notNullValue;
 
 public class CourierSteps {
 
     private static String COURIER = "/api/v1/courier/";
     private static String LOGIN_COURIER = "/api/v1/courier/login";
 
+    @Step("Метод создания курьера")
     public ValidatableResponse createCourier(Courier courier){
         return given()
                 .body(courier)
@@ -19,6 +20,7 @@ public class CourierSteps {
                 .then();
     }
 
+    @Step("Метод авторизации курьера")
     public ValidatableResponse loginCourier(Courier courier){
         return given()
                 .body(courier)
@@ -27,19 +29,12 @@ public class CourierSteps {
                 .then();
     }
 
+    @Step("Метод удаления курьера")
     public ValidatableResponse deleteCourier(Integer courierId) {
         return given()
                 .pathParam("id", courierId)
                 .when()
-                .delete(COURIER + "/{id}")
+                .delete(COURIER + "{id}")
                 .then();
-    }
-
-    public Integer getCourierId(Courier courier) {
-        return loginCourier(courier)
-                .statusCode(200)
-                .body("id", notNullValue())
-                .extract()
-                .path("id");
     }
 }
